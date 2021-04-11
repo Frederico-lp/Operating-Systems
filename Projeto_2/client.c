@@ -15,6 +15,8 @@
 #include <signal.h>
 #include <pthread.h>
 
+int fd;
+
 typedef struct Messages {
    int requestNumber;
    int number;
@@ -25,12 +27,27 @@ typedef struct Messages {
 } Message;
 
 void *clientThread(void *arg){
+    char *privateFIFO;
+    sprintf(privateFIFO, "/tmp/%d.%d", getpid(), gettid());
+    
+    if(mkfifo(privateFIFO, 0777) < 0){// q permissao escolho?
+        perror("Error creating private FIFO");
+        exit(1);//exit ou return?
+    }
+    //mandar pedido pelo public pipe
+    //abrir pipe
+    //escrever ou ler(uma delas)
+    //fechar pipe
+    //eliminar pipe
+
+
+    pthread_exit(NULL);
 
 }
  
 
 int main(int argc, char* argv[], char* envp[]) {
-    int nsecs;
+    int nsecs, timeout;
     char* fifoname;
     srand (time(NULL));
 
@@ -40,15 +57,21 @@ int main(int argc, char* argv[], char* envp[]) {
     }
 
     nsecs = argv[1];
-    strcpy(fifoname, argv[2]);
+    strcpy(fifoname, argv[2]);  //se n tiver /tmp/ acho q tenho de acrescentar
+    //quem cria o canal publico? server ou client??
+    //mkfifo(fifoname, )
+    fd = open(fifoname, O_WRONLY);// open to write-only, fd == file descriptor
 
     pthread_t thread_id;
-    while(??){
+    while(timeout){  //tem a ver com o timeout mas n sei o que e suposto fazer
         if(pthread_create(&thread_id, NULL, clientThread, NULL))
             perror("Error creating thread");
 
+        delay();
+
     }
     //pthread_join()
+    //pthread_exit()
 
 
     
