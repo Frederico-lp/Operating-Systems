@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
 #include <dirent.h>
 #include <unistd.h>
@@ -22,34 +23,56 @@ typedef struct Messages {
    int number;
    int pid;
    int tid;
-   int serverRes;
    int clientRes;
 } Message;
 
+Message* create_msg(int id){
+    Message* msg = (Message*)malloc(sizeof(Message));
+    msg->requestNumber = id;
+    msg->number = rand() % 9 + 1;
+    msg->pid = getpid();
+    msg->tid = pthread_self();
+    msg->clientRes = -1;
+    
+    return msg;
+}
+
 void *clientThread(void *arg){
     char *privateFIFO;
-    sprintf(privateFIFO, "/tmp/%d.%d", getpid(), gettid());
+    int private_pipe;
+    sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
     
-    if(mkfifo(privateFIFO, 0777) < 0){// q permissao escolho?
+    if(mkfifo(privateFIFO, 0666) < 0){// q permissao escolho?
         perror("Error creating private FIFO");
         exit(1);//exit ou return?
     }
+
+    Message *msg = create_msg(*(int*)arg);
+
     //mandar pedido pelo public pipe
-   //
+
+   //escreve
+
     //abrir pipe
     if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
         perror("Error opening private FIFO");
+        free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
         exit(1);
     }
-    //escrever ou ler(uma delas)
+    
+    //ler pipe
    //
+
+
     //fechar pipe
     if (close(private_pipe) == -1) {
+        free(msg);
         perror("Error closing private FIFO");
         pthread_exit(NULL);
     }
     //eliminar pipe
     if (unlink(privateFIFO) == -1){
+        free(msg);
         perror("Error deleting private FIFO");
         exit(1);
     }
@@ -60,7 +83,9 @@ void *clientThread(void *arg){
  
 
 int main(int argc, char* argv[], char* envp[]) {
-    int nsecs, timeout;
+    int nsecs, timeout, *requestNumber;
+    requestNumber = malloc(sizeof(int));
+    *requestNumber = 1;
     char* fifoname;
     srand (time(NULL));
 
@@ -69,24 +94,30 @@ int main(int argc, char* argv[], char* envp[]) {
         exit(1);//return 1?
     }
 
-    nsecs = argv[1];
-    strcpy(fifoname, argv[2]);  //se n tiver /tmp/ acho q tenho de acrescentar
-    //quem cria o canal publico? server ou client??
-    //mkfifo(fifoname, )
+    nsecs = atoi(argv[1]);
+    strcpy(fifoname, argv[2]);  //se n tiver /tmp/ acrescentar
+    if(strstr("/tmp/", fifoname) == NULL)
+        sprintf(fifoname, "/tmp/%s", fifoname);
+    
+
     fd = open(fifoname, O_WRONLY);// open to write-only, fd == file descriptor
 
     pthread_t thread_id;
-    while(timeout){  //tem a ver com o timeout mas n sei o que e suposto fazer
-        if(pthread_create(&thread_id, NULL, clientThread, NULL))
+    int start = time(NULL);
+    time_t endwait = time(NULL) + nsecs;
+    while(start < endwait){  //tem a ver com o timeout mas n sei o que e suposto fazer
+        if(pthread_create(&thread_id, NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
+            exit(1);
+        }
 
-        delay();
-
+        //delay(rand() % 10);
+        int time_aux = (rand() % 10 + 5) * 0.001;
+        sleep(time_aux);
+        *requestNumber++;
+        start = time(NULL);
     }
+
     //pthread_join()
     //pthread_exit()
-
-
-    
-
 }
