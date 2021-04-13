@@ -35,11 +35,24 @@ void *clientThread(void *arg){
         exit(1);//exit ou return?
     }
     //mandar pedido pelo public pipe
+   //
     //abrir pipe
+    if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
+        perror("Error opening private FIFO");
+        exit(1);
+    }
     //escrever ou ler(uma delas)
+   //
     //fechar pipe
+    if (close(private_pipe) == -1) {
+        perror("Error closing private FIFO");
+        pthread_exit(NULL);
+    }
     //eliminar pipe
-
+    if (unlink(privateFIFO) == -1){
+        perror("Error deleting private FIFO");
+        exit(1);
+    }
 
     pthread_exit(NULL);
 
