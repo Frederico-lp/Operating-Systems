@@ -16,7 +16,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-int fd;
+int public_pipe;
 
 typedef struct Messages {
    int requestNumber;
@@ -49,20 +49,29 @@ void *clientThread(void *arg){
 
     Message *msg = create_msg(*(int*)arg);
 
-    //mandar pedido pelo public pipe
+    //send request through public pipe
+    if(write(public_pipe, msg, sizeof(Message)) == -1){
+        //acho q vai faltar o log aqui
+        free(msg);
+        perror("Error sending request to public FIFO");
+        exit(1);//exit ou return?
+    }
 
-   //escreve
 
-    //abrir pipe
+
+    //open private pipe
     if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
-        perror("Error opening private FIFO");
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
+        perror("Error opening private FIFO");
         exit(1);
     }
     
-    //ler pipe
-   //
-
+    //read private pipe
+    if(read(private_pipe, msg, sizeof(Message) == -1)){
+        free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
+        perror("Error reading private FIFO");
+        exit(1);
+    }
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -70,6 +79,7 @@ void *clientThread(void *arg){
         perror("Error closing private FIFO");
         pthread_exit(NULL);
     }
+
     //eliminar pipe
     if (unlink(privateFIFO) == -1){
         free(msg);
@@ -77,6 +87,7 @@ void *clientThread(void *arg){
         exit(1);
     }
 
+    free(msg);
     pthread_exit(NULL);
 
 }
@@ -100,7 +111,7 @@ int main(int argc, char* argv[], char* envp[]) {
         sprintf(fifoname, "/tmp/%s", fifoname);
     
 
-    fd = open(fifoname, O_WRONLY);// open to write-only, fd == file descriptor
+    public_pipe = open(fifoname, O_WRONLY);// open to write-only, public_pipe == file descriptor
 
     pthread_t thread_id;
     int start = time(NULL);
