@@ -37,7 +37,26 @@ Message* create_msg(int id){
     return msg;
 }
 
+void op_print(char op[], Message msg){
+
+    if(strlen(op)!=5){
+        perror("Not an operation\n");
+    }
+
+    time_t cur_time=time(NULL);
+    int i=msg.requestNumber, t=msg.number, pid=msg.pid, tid=msg.tid, res=msg.clientRes, ret_value;
+    //returns the number of bytes that are printed or a negative value if error
+    ret_value=fprintf(stdout, "%ld ; %d ; %d ; %d ; %d ; %d ; %s\n", cur_time, i, t, pid, tid, res, op);
+
+    if(ret_value<=0){
+        perror("Error in fprintf\n");
+    }
+
+    fflush(stdout);
+}
+
 void *clientThread(void *arg){
+    
     char *privateFIFO;
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
@@ -50,13 +69,19 @@ void *clientThread(void *arg){
     Message *msg = create_msg(*(int*)arg);
 
     //send request through public pipe
-    if(write(public_pipe, msg, sizeof(Message)) == -1){
+    int ret_value = write(public_pipe, msg, sizeof(Message));
+
+    //write() returns the number of bytes written into the array or -1 if error
+    if(ret_value>0){
+        op_print("IWANT", *msg);
+    }
+    else if(ret_value == -1){
+
         //acho q vai faltar o log aqui
         free(msg);
         perror("Error sending request to public FIFO");
         exit(1);//exit ou return?
     }
-
 
 
     //open private pipe
@@ -67,10 +92,17 @@ void *clientThread(void *arg){
     }
     
     //read private pipe
-    if(read(private_pipe, msg, sizeof(Message) == -1)){
+    int ret_value2 = read(private_pipe, msg, sizeof(Message));
+    if(ret_value2 == -1){
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
         perror("Error reading private FIFO");
         exit(1);
+    }
+    else if(ret_value2>0){
+        //-1 se o serviço já está encerrado (pelo que o pedido não foi atendido);
+        if(msg->clientRes == -1){
+            op_print("CLOSD",*msg);
+        }
     }
 
     //fechar pipe
@@ -94,6 +126,7 @@ void *clientThread(void *arg){
  
 
 int main(int argc, char* argv[], char* envp[]) {
+
     int nsecs, timeout, *requestNumber;
     requestNumber = malloc(sizeof(int));
     *requestNumber = 1;
