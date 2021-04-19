@@ -38,11 +38,6 @@ Message* create_msg(int id){
 }
 
 void op_print(char op[], Message msg){
-
-    if(strlen(op)!=5){
-        perror("Not an operation\n");
-    }
-
     time_t cur_time=time(NULL);
     int i=msg.requestNumber, t=msg.number, pid=msg.pid, tid=msg.tid, res=msg.clientRes, ret_value;
     //returns the number of bytes that are printed or a negative value if error
@@ -99,11 +94,14 @@ void *clientThread(void *arg){
         exit(1);
     }
     else if(ret_value2>0){
+
         //-1 se o serviço já está encerrado (pelo que o pedido não foi atendido);
         if(msg->clientRes == -1){
-            op_print("CLOSD",*msg);
+            op_print("CLOSD",*msg); //esta ao contrario?
         }
+        else op_print("GOTRS", *msg);
     }
+    else op_print("FAILD", *msg);   // fail or close?
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -161,7 +159,8 @@ int main(int argc, char* argv[], char* envp[]) {
         *requestNumber++;
         start = time(NULL);
     }
-
+    //pthread_kill()
+    
     //pthread_join()
     //pthread_exit()
 }
