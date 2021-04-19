@@ -1,4 +1,4 @@
-#include <stdio.h>
+go#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -144,11 +144,12 @@ int main(int argc, char* argv[], char* envp[]) {
 
     public_pipe = open(fifoname, O_WRONLY);// open to write-only, public_pipe == file descriptor
 
-    pthread_t thread_id;
+    pthread_t thread_id[/**n de threads**/];
     int start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
+    int tnum = 0;
     while(start < endwait){  //tem a ver com o timeout mas n sei o que e suposto fazer
-        if(pthread_create(&thread_id, NULL, clientThread, requestNumber)){    //request number
+        if(pthread_create(&thread_id[tnum], NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
         }
@@ -158,8 +159,11 @@ int main(int argc, char* argv[], char* envp[]) {
         sleep(time_aux);
         *requestNumber++;
         start = time(NULL);
+        tnum++;
     }
-    //pthread_kill()
+    for (int i = 0; i <= tnum; i++) {
+        phtread_kill(thread_id[i], /**SIGNAL**/);
+    }
     
     //pthread_join()
     //pthread_exit()
