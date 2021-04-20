@@ -1,4 +1,4 @@
-go#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -17,6 +17,7 @@ go#include <stdio.h>
 #include <pthread.h>
 
 int public_pipe;
+__thread bool gaveup = false;
 
 typedef struct Messages {
    int requestNumber;
@@ -51,7 +52,7 @@ void op_print(char op[], Message msg){
 }
 
 void gavup(int sig) {
-    op_print("GAVUP", *msg)
+    gaveup = true;
 }
 
 void *clientThread(void *arg){
@@ -103,6 +104,9 @@ void *clientThread(void *arg){
         if(msg->clientRes == -1){
             op_print("CLOSD",*msg); //esta ao contrario?
         }
+        else if (gaveup) {
+            op_print("GAVUP", *msg);
+        }
         else op_print("GOTRS", *msg);
     }
     else op_print("FAILD", *msg);   // fail or close?
@@ -148,7 +152,7 @@ int main(int argc, char* argv[], char* envp[]) {
 
     public_pipe = open(fifoname, O_WRONLY);// open to write-only, public_pipe == file descriptor
 
-    pthread_t thread_id[/**n de threads**/];
+    pthread_t* thread_id;
     int start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
     int tnum = 0;
@@ -166,7 +170,7 @@ int main(int argc, char* argv[], char* envp[]) {
         tnum++;
     }
     for (int i = 0; i <= tnum; i++) {
-        phtread_kill(thread_id[i], SIGUSR1);
+        pthread_kill(thread_id[i], SIGUSR1);
     }
     
     //pthread_join()
