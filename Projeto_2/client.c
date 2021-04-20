@@ -50,8 +50,12 @@ void op_print(char op[], Message msg){
     fflush(stdout);
 }
 
+void gavup(int sig) {
+    op_print("GAVUP", *msg)
+}
+
 void *clientThread(void *arg){
-    
+    signal(SIGUSR1, gavup);
     char *privateFIFO;
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
@@ -162,7 +166,7 @@ int main(int argc, char* argv[], char* envp[]) {
         tnum++;
     }
     for (int i = 0; i <= tnum; i++) {
-        phtread_kill(thread_id[i], /**SIGNAL**/);
+        phtread_kill(thread_id[i], SIGUSR1);
     }
     
     //pthread_join()
