@@ -156,7 +156,7 @@ int main(int argc, char* argv[], char* envp[]) {
     int start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
     while(start < endwait){  //tem a ver com o timeout mas n sei o que e suposto fazer
-        if(pthread_create(&thread_id[tnum], NULL, clientThread, requestNumber)){    //request number
+        if(pthread_create(&thread_id[*requestNumber-1], NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
         }
