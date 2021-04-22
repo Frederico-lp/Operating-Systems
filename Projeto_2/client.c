@@ -63,7 +63,7 @@ void *clientThread(void *arg){
     
     if(mkfifo(privateFIFO, 0666) < 0){// q permissao escolho?
         perror("Error creating private FIFO");
-        exit(1);//exit ou return?
+        exit(1);
     }
 
     Message *msg = create_msg(*(int*)arg);
@@ -80,7 +80,7 @@ void *clientThread(void *arg){
         //acho q vai faltar o log aqui
         free(msg);
         perror("Error sending request to public FIFO");
-        exit(1);//exit ou return?
+        exit(1);
     }
 
 
@@ -133,7 +133,7 @@ void *clientThread(void *arg){
 
 int main(int argc, char* argv[], char* envp[]) {
 
-    int nsecs, timeout, *requestNumber;
+    int nsecs, *requestNumber;
     requestNumber = malloc(sizeof(int));
     *requestNumber = 1;
     char* fifoname;
@@ -155,7 +155,7 @@ int main(int argc, char* argv[], char* envp[]) {
     pthread_t* thread_id;
     int start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
-    while(start < endwait){  //tem a ver com o timeout mas n sei o que e suposto fazer
+    while(start < endwait){ 
         if(pthread_create(&thread_id[*requestNumber-1], NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
@@ -170,7 +170,8 @@ int main(int argc, char* argv[], char* envp[]) {
     for (int i = 0; i < *requestNumber - 1; i++) {
         pthread_kill(thread_id[i], SIGUSR1);
     }
-    
+
+    free(requestNumber);
     //pthread_join()
-    //pthread_exit()
+    pthread_exit(NULL);
 }
