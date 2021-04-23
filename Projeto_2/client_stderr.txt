@@ -1,0 +1,1 @@
+Error opening private FIFO: Too many open files

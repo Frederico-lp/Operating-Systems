@@ -16,8 +16,8 @@
 #include <signal.h>
 #include <pthread.h>
 
-int public_pipe;
-__thread bool gaveup = false;
+static int public_pipe;
+__thread int gaveup = 0;
 
 typedef struct Messages {
    int requestNumber;
@@ -52,12 +52,12 @@ void op_print(char op[], Message msg){
 }
 
 void gavup(int sig) {
-    gaveup = true;
+    gaveup = 1;
 }
 
 void *clientThread(void *arg){
     signal(SIGUSR1, gavup);
-    char *privateFIFO;
+    char privateFIFO[25];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
     
@@ -67,6 +67,8 @@ void *clientThread(void *arg){
     }
 
     Message *msg = create_msg(*(int*)arg);
+
+    free(arg);
 
     //send request through public pipe
     int ret_value = write(public_pipe, msg, sizeof(Message));
@@ -136,40 +138,51 @@ int main(int argc, char* argv[], char* envp[]) {
     int nsecs, *requestNumber;
     requestNumber = malloc(sizeof(int));
     *requestNumber = 1;
-    char* fifoname;
+    char fifoname[25];
     srand (time(NULL));
 
     if(argc != 4){
         perror("Usage: c <-t nsecs> fifoname");
         exit(1);//return 1?
     }
-
-    nsecs = atoi(argv[1]);
-    strcpy(fifoname, argv[2]);  //se n tiver /tmp/ acrescentar
-    if(strstr("/tmp/", fifoname) == NULL)
+    nsecs = atoi(argv[2]);
+    strcpy(fifoname, argv[3]);  //se n tiver /tmp/ acrescentar
+    if(strstr(fifoname, "/tmp/") == NULL)
         sprintf(fifoname, "/tmp/%s", fifoname);
     
-
-    public_pipe = open(fifoname, O_WRONLY);// open to write-only, public_pipe == file descriptor
-
-    pthread_t* thread_id;
-    int start = time(NULL);
+    int tries = 0;
+    for(int tries = 0; tries < 3; tries ++){
+        public_pipe = open(fifoname, O_WRONLY);
+        if(public_pipe != -1)
+            break;
+        sleep(0.01);
+    }
+    if(public_pipe == -1){
+        perror("Error opening public FIFO");
+        free(requestNumber);
+        exit(1);
+    }
+    pthread_t thread_id;
+    time_t start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
     while(start < endwait){ 
-        if(pthread_create(&thread_id[*requestNumber-1], NULL, clientThread, requestNumber)){    //request number
+        printf("AQUI\n");
+        if(pthread_create(&thread_id, NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
         }
-
-        //delay(rand() % 10);
+        pthread_detach(thread_id);
+        //delay(rand() % 10 + 5);
         int time_aux = (rand() % 10 + 5) * 0.001;
         sleep(time_aux);
-        *requestNumber++;
+        //*requestNumber++;
         start = time(NULL);
     }
+    /*
     for (int i = 0; i < *requestNumber - 1; i++) {
         pthread_kill(thread_id[i], SIGUSR1);
     }
+    */
 
     free(requestNumber);
     //pthread_join()
