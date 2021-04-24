@@ -162,12 +162,13 @@ int main(int argc, char* argv[], char* envp[]) {
         free(requestNumber);
         exit(1);
     }
-    pthread_t thread_id;
+    pthread_t thread_id[9999];
     time_t start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
+    int threadnum = 0;
     while(start < endwait){ 
         printf("AQUI\n");
-        if(pthread_create(&thread_id, NULL, clientThread, requestNumber)){    //request number
+        if(pthread_create(&thread_id[threadnum], NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
         }
@@ -177,12 +178,13 @@ int main(int argc, char* argv[], char* envp[]) {
         sleep(time_aux);
         //*requestNumber++;
         start = time(NULL);
+        threadnum++;
     }
-    /*
-    for (int i = 0; i < *requestNumber - 1; i++) {
+    
+    for (int i = 0; i < threadnum; i++) {
         pthread_kill(thread_id[i], SIGUSR1);
     }
-    */
+    
 
     free(requestNumber);
     //pthread_join()
