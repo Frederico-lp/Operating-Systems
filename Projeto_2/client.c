@@ -56,11 +56,11 @@ void gavup(int sig) {
 }
 
 void *clientThread(void *arg){
-    signal(SIGUSR1, gavup);
+    //signal(SIGUSR1, gavup);
     char privateFIFO[25];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
-    
+    printf("%s\n", privateFIFO);
     if(mkfifo(privateFIFO, 0777) < 0){
         perror("Error creating private FIFO");
         exit(1);
@@ -78,7 +78,6 @@ void *clientThread(void *arg){
         op_print("IWANT", *msg);
     }
     else if(ret_value < 0){
-
         //acho q vai faltar o log aqui
         free(msg);
         perror("Error sending request to public FIFO");
@@ -90,13 +89,13 @@ void *clientThread(void *arg){
     if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
         perror("Error opening private FIFO");
-        printf("aqui 2\n");
         exit(1);
     }
 
+    printf("entra aqui\n");
     //read private pipe
     int ret_value2 = read(private_pipe, msg, sizeof(Message));
-    if(ret_value2 == -1){
+    if(ret_value2 < 0){
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
         perror("Error reading private FIFO");
         exit(1);
@@ -105,14 +104,14 @@ void *clientThread(void *arg){
 
         //-1 se o serviço já está encerrado (pelo que o pedido não foi atendido);
         if(msg->clientRes != -1){
-            op_print("CLOSD",*msg); //esta ao contrario?
+            op_print("GOTRS",*msg); 
         }
         else if (gaveup) {
             op_print("GAVUP", *msg);
         }
-        else op_print("GOTRS", *msg);
+        //else op_print("GOTRS", *msg);
     }
-    else op_print("FAILD", *msg);   // fail or close?
+    else op_print("CLOSD", *msg);   //retval == 0 se msg->clientRes == -1?
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -152,12 +151,14 @@ int main(int argc, char* argv[], char* envp[]) {
         sprintf(buffer, "/tmp/%s", fifoname);
         strcpy(fifoname, buffer);
     }
+    time_t start = time(NULL);
+    time_t endwait = time(NULL) + nsecs;
     
     for(int tries = 0; tries < 3; tries ++){
         public_pipe = open(fifoname, O_WRONLY);
         if(public_pipe != -1)
             break;
-        sleep(0.1);
+        sleep(0.5);
     }
     if(public_pipe == -1){
         perror("Error opening public FIFO");
@@ -165,11 +166,9 @@ int main(int argc, char* argv[], char* envp[]) {
         exit(1);
     }
     pthread_t thread_id[9999];
-    time_t start = time(NULL);
-    time_t endwait = time(NULL) + nsecs;
+    
     int threadnum = 0;
     while(start < endwait){ 
-        printf("AQUI\n");
         if(pthread_create(&thread_id[threadnum], NULL, clientThread, requestNumber)){    //request number
             perror("Error creating thread");
             exit(1);
