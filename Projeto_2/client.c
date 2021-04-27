@@ -177,11 +177,8 @@ int main(int argc, char* argv[], char* envp[]) {
     }
     pthread_t tid;
     
-    char publicfifo[255]="server/";
-    strcat(publicfifo, fifoname);
-
     while(start < endwait){ 
-        if(pthread_create(&tid, NULL, clientThread, &publicfifo)){    //request number
+        if(pthread_create(&tid, NULL, clientThread, NULL)){    //request number
             perror("Error creating thread");
             exit(1);
         }
