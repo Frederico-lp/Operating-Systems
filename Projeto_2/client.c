@@ -16,31 +16,35 @@
 #include <signal.h>
 #include <pthread.h>
 
+#define BUFFER 1024
+
 static int public_pipe;
+static int requestNumber = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 __thread int gaveup = 0;
 
 typedef struct Messages {
-   int requestNumber;
-   int number;
-   int pid;
-   int tid;
-   int clientRes;
+    int rid;    // request id
+    pid_t pid;    // process id
+    pthread_t tid;    // thread id
+    int tskload;    // task load
+    int tskres;    // task result
 } Message;
 
-Message* create_msg(int id){
+Message* create_msg(){
     Message* msg = (Message*)malloc(sizeof(Message));
-    msg->requestNumber = id;
-    msg->number = rand() % 9 + 1;
+    msg->rid = requestNumber;
+    msg->tskload = rand() % 9 + 1;
     msg->pid = getpid();
     msg->tid = pthread_self();
-    msg->clientRes = -1;
+    msg->tskres = -1;
     
     return msg;
 }
 
 void op_print(char op[], Message msg){
     time_t cur_time=time(NULL);
-    int i=msg.requestNumber, t=msg.number, pid=msg.pid, tid=msg.tid, res=msg.clientRes, ret_value;
+    int i=msg.rid, t=msg.tskload, pid=msg.pid, tid=msg.tid, res=msg.tskres, ret_value;
     //returns the number of bytes that are printed or a negative value if error
     ret_value=fprintf(stdout, "%ld ; %d ; %d ; %d ; %d ; %d ; %s\n", cur_time, i, t, pid, tid, res, op);
 
@@ -55,20 +59,26 @@ void gavup(int sig) {
     gaveup = 1;
 }
 
-void *clientThread(void *arg){
+void *clientThread(){
     //signal(SIGUSR1, gavup);
-    char privateFIFO[25];
+    pthread_detach(pthread_self());
+
+    char privateFIFO[1000];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
     printf("%s\n", privateFIFO);
-    if(mkfifo(privateFIFO, 0777) < 0){
+
+    if(mkfifo(privateFIFO, 0660) < 0){
         perror("Error creating private FIFO");
         exit(1);
     }
 
-    Message *msg = create_msg(*(int*)arg);
+    Message *msg = create_msg();
 
-    free(arg);
+    pthread_mutex_lock(&mutex);
+    requestNumber++;
+    pthread_mutex_unlock(&mutex);
+
 
     //send request through public pipe
     int ret_value = write(public_pipe, msg, sizeof(Message));
@@ -92,8 +102,8 @@ void *clientThread(void *arg){
         exit(1);
     }
 
-    printf("entra aqui\n");
     //read private pipe
+    printf("passa aqui\n");
     int ret_value2 = read(private_pipe, msg, sizeof(Message));
     if(ret_value2 < 0){
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
@@ -103,7 +113,7 @@ void *clientThread(void *arg){
     else if(ret_value2>0){
 
         //-1 se o serviço já está encerrado (pelo que o pedido não foi atendido);
-        if(msg->clientRes != -1){
+        if(msg->tskres != -1){
             op_print("GOTRS",*msg); 
         }
         else if (gaveup) {
@@ -111,7 +121,7 @@ void *clientThread(void *arg){
         }
         //else op_print("GOTRS", *msg);
     }
-    else op_print("CLOSD", *msg);   //retval == 0 se msg->clientRes == -1?
+    else op_print("CLOSD", *msg);  
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -129,15 +139,15 @@ void *clientThread(void *arg){
 
     free(msg);
     pthread_exit(NULL);
-
 }
  
 
 int main(int argc, char* argv[], char* envp[]) {
 
-    int nsecs, *requestNumber;
-    requestNumber = malloc(sizeof(int));
-    *requestNumber = 1;
+    int nsecs;
+    // *requestNumber;
+    //requestNumber = malloc(sizeof(int));
+    //*requestNumber = 1;
     char fifoname[25], buffer[30];
     srand (time(NULL));
 
@@ -158,39 +168,32 @@ int main(int argc, char* argv[], char* envp[]) {
         public_pipe = open(fifoname, O_WRONLY);
         if(public_pipe != -1)
             break;
-        sleep(0.5);
+        sleep(1);
     }
     if(public_pipe == -1){
         perror("Error opening public FIFO");
-        free(requestNumber);
+        //free(requestNumber);
         exit(1);
     }
-    pthread_t thread_id[9999];
+    pthread_t tid;
     
-    int threadnum = 0;
     while(start < endwait){ 
-        if(pthread_create(&thread_id[threadnum], NULL, clientThread, requestNumber)){    //request number
+        if(pthread_create(&tid, NULL, clientThread, NULL)){    //request number
             perror("Error creating thread");
             exit(1);
         }
-        pthread_detach(thread_id[threadnum]);
+        pthread_detach(tid);
         //delay(rand() % 10 + 5);
         int time_aux = (rand() % 10 + 5) * 0.01;
         sleep(time_aux);
         sleep(1);
         //*requestNumber++;
         start = time(NULL);
-        threadnum++;
+
     }
-    
-    for (int i = 0; i < threadnum; i++) {
-        pthread_kill(thread_id[i], SIGUSR1);
-    }
-    
     
 
-    free(requestNumber);
-    //pthread_join()
-    pthread_exit(NULL);
-    return 0;
+    //free(requestNumber);
+    pthread_join(tid, NULL);
+    pthread_exit(0);
 }
