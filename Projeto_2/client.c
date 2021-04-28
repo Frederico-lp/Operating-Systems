@@ -100,8 +100,9 @@ void *clientThread(){
     }
 
     //read private pipe
-    printf("passa aqui\n");
+    //timeout?
     int ret_value2 = read(private_pipe, msg, sizeof(Message));
+
     if(ret_value2 < 0){
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
         perror("Error reading private FIFO");
@@ -113,12 +114,14 @@ void *clientThread(){
         if(msg->tskres != -1){
             op_print("GOTRS",*msg); 
         }
+        /*
         else if (gaveup){
             op_print("GAVUP", *msg);
         }
-        //else op_print("GOTRS", *msg);
+        */
+        else op_print("CLOSD", *msg);
     }
-    else op_print("CLOSD", *msg);  
+    else op_print("GAVUP", *msg);  
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -184,8 +187,7 @@ int main(int argc, char* argv[], char* envp[]) {
 
     }
     //giveUp();
-    
-
-
+    //man pthread_cleanup_push;
+    //void pthread_cleanup_push(void (*routine)(void *), void *arg);
     pthread_exit(0);
 }
