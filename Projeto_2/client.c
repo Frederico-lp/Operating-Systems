@@ -21,7 +21,7 @@
 static int public_pipe;
 static int requestNumber = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-__thread int gaveup = 0;
+int gaveup = 0;
 
 typedef struct Messages {
     int rid;    // request id
@@ -55,14 +55,11 @@ void op_print(char op[], Message msg){
     fflush(stdout);
 }
 
-void gavup(int sig) {
+void giveUp() {
     gaveup = 1;
 }
 
 void *clientThread(){
-    //signal(SIGUSR1, gavup);
-    pthread_detach(pthread_self());
-
     char privateFIFO[1000];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", getpid(), pthread_self());
@@ -110,13 +107,13 @@ void *clientThread(){
         perror("Error reading private FIFO");
         exit(1);
     }
-    else if(ret_value2>0){
+    else if(ret_value2 > 0){
 
         //-1 se o serviço já está encerrado (pelo que o pedido não foi atendido);
         if(msg->tskres != -1){
             op_print("GOTRS",*msg); 
         }
-        else if (gaveup) {
+        else if (gaveup){
             op_print("GAVUP", *msg);
         }
         //else op_print("GOTRS", *msg);
@@ -145,15 +142,12 @@ void *clientThread(){
 int main(int argc, char* argv[], char* envp[]) {
 
     int nsecs;
-    // *requestNumber;
-    //requestNumber = malloc(sizeof(int));
-    //*requestNumber = 1;
     char fifoname[25], buffer[30];
     srand (time(NULL));
 
     if(argc != 4){
         perror("Usage: c <-t nsecs> fifoname");
-        exit(1);//return 1?
+        exit(1);
     }
     nsecs = atoi(argv[2]);
     strcpy(fifoname, argv[3]);  //se n tiver /tmp/ acrescentar
@@ -172,28 +166,26 @@ int main(int argc, char* argv[], char* envp[]) {
     }
     if(public_pipe == -1){
         perror("Error opening public FIFO");
-        //free(requestNumber);
         exit(1);
     }
     pthread_t tid;
     
     while(start < endwait){ 
-        if(pthread_create(&tid, NULL, clientThread, NULL)){    //request number
+        if(pthread_create(&tid, NULL, clientThread, NULL)){  
             perror("Error creating thread");
             exit(1);
         }
         pthread_detach(tid);
-        //delay(rand() % 10 + 5);
-        int time_aux = (rand() % 10 + 5) * 0.01;
-        sleep(time_aux);
-        sleep(1);
-        //*requestNumber++;
+
+        double time_aux = (rand() % 10 + 5) * 100;
+        usleep(time_aux);
+
         start = time(NULL);
 
     }
+    //giveUp();
     
 
-    //free(requestNumber);
-    pthread_join(tid, NULL);
+
     pthread_exit(0);
 }
