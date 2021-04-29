@@ -64,6 +64,8 @@ void giveUp(Message* msg) {
 static void cleanup_unlock_mutex(void *p)
 {
     pthread_mutex_unlock(p);
+    Message *msg = create_msg();
+	op_print("GAVUP", *msg);
 }
 
 void *clientThread(){
@@ -77,12 +79,11 @@ void *clientThread(){
         exit(1);
     }
 
-    Message *msg = create_msg();
-
     pthread_cleanup_push(cleanup_unlock_mutex, &mutex);
     pthread_mutex_lock(&mutex);
     requestNumber++;
     pthread_cleanup_pop(1);
+    Message *msg = create_msg();
 
 
     //send request through public pipe
