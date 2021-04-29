@@ -43,6 +43,7 @@ Message* create_msg(){
 }
 
 void op_print(char op[], Message msg){
+    
     time_t cur_time=time(NULL);
     int i=msg.rid, t=msg.tskload, pid=msg.pid, tid=msg.tid, res=msg.tskres, ret_value;
     //returns the number of bytes that are printed or a negative value if error
@@ -55,8 +56,14 @@ void op_print(char op[], Message msg){
     fflush(stdout);
 }
 
-void giveUp() {
-    gaveup = 1;
+void giveUp(Message* msg) {
+    
+    op_print("GAVUP", *msg);  
+}
+
+static void cleanup_unlock_mutex(void *p)
+{
+    pthread_mutex_unlock(p);
 }
 
 void *clientThread(){
@@ -72,9 +79,10 @@ void *clientThread(){
 
     Message *msg = create_msg();
 
+    pthread_cleanup_push(cleanup_unlock_mutex, &mutex);
     pthread_mutex_lock(&mutex);
     requestNumber++;
-    pthread_mutex_unlock(&mutex);
+    pthread_cleanup_pop(1);
 
 
     //send request through public pipe
@@ -119,9 +127,8 @@ void *clientThread(){
             op_print("GAVUP", *msg);
         }
         */
-        else op_print("CLOSD", *msg);
+        //else op_print("CLOSD", *msg);
     }
-    else op_print("GAVUP", *msg);  
 
     //fechar pipe
     if (close(private_pipe) == -1) {
@@ -188,6 +195,5 @@ int main(int argc, char* argv[], char* envp[]) {
     }
     //giveUp();
     //man pthread_cleanup_push;
-    //void pthread_cleanup_push(void (*routine)(void *), void *arg);
     pthread_exit(0);
 }
