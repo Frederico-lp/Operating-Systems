@@ -28,16 +28,6 @@ typedef struct Messages { //é diferente não?
     int tskres;    // task result
 } Message;
 
-Message* create_msg() {
-    Message* msg = (Message*)malloc(sizeof(Message));
-    msg->rid = requestNumber;
-    msg->tskload = rand() % 9 + 1;
-    msg->pid = getpid();
-    msg->tid = pthread_self();
-    msg->tskres = -1;
-
-    return msg;
-}
 
 void op_print(char op[], Message msg) {
     time_t cur_time = time(NULL);
@@ -52,7 +42,31 @@ void op_print(char op[], Message msg) {
     fflush(stdout);
 }
 
-void* serverThread() {
+void* serverThread(void* message) {
+    /*
+    ISTO NAO VAI SER PARA A THREAD PRODUTORA
+    char privateFIFO[1000];
+    int private_pipe;
+    //usar msg para obter variaveis para abrir o private fifo
+    Message* msg = (Message*) message;
+
+    sprintf(privateFIFO, "/tmp/%d.%ld", msg->pid, msg->tid);
+
+    //NAO TENHO A CERTEZA DESTES PASSOS:
+    //mandar pedido ao B
+    // se receber pedido imprimir TSKEX
+
+
+    if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
+        free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
+        perror("Error opening private FIFO");
+        exit(1);
+    }
+    */
+
+
+
+    //fechar fifo privado(o client é q elimina)
 }
 
 int main(int argc, char* argv[], char* envp[]) {
@@ -103,29 +117,33 @@ int main(int argc, char* argv[], char* envp[]) {
     bool processing = true;
     int reading;
 
-    while (start < endwait) {
-        msg = create_msg();
+    while (start < endwait) {   //tenho de dar free a msg em todos os ciclos?
+        msg = (Message*)malloc(sizeof(Message));
         reading = read(public_pipe, msg, sizeof(Message));
 
         if (reading > 0) {
-            op_print("RECVD", *msg);    //??
+            op_print("RECVD", *msg);    
 
+            //o semaforo é aqui ou na thread produtora?
             if(sem_wait(bufszSem) == -1){
                 free(msg);
                 perror("Error waiting for semaphore\n");
                 break;
             }
 
-            if (pthread_create(&tid, NULL, serverThread, NULL)) {
+            if (pthread_create(&tid, NULL, serverThread, (void*) msg)) {
+                //cria thread produtora
                 perror("Error creating thread");
                 exit(1);
+            }
+
+            pthread_detach(tid);
         }
 
-
-        }
         else if (reading == 0) {
             free(msg);
         }
+
         else {
             perror("Error reading public FIFO");
             free(msg);
