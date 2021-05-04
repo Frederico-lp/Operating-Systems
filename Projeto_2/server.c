@@ -19,6 +19,7 @@
 
 sem_t *bufszSem;
 static int public_pipe;
+static int consuming = 1;
 
 typedef struct Messages { //é diferente não?
     int rid;    // request id
@@ -42,7 +43,7 @@ void op_print(char op[], Message msg) {
     fflush(stdout);
 }
 
-void* serverThread(void* message) {
+void* producerThread(void* message) {
     /*
     ISTO NAO VAI SER PARA A THREAD PRODUTORA
     char privateFIFO[1000];
@@ -50,11 +51,24 @@ void* serverThread(void* message) {
     //usar msg para obter variaveis para abrir o private fifo
     Message* msg = (Message*) message;
 
-    sprintf(privateFIFO, "/tmp/%d.%ld", msg->pid, msg->tid);
 
     //NAO TENHO A CERTEZA DESTES PASSOS:
+    //semaforo que monitoriza a quantidade de pedidos ao bufsz
     //mandar pedido ao B
-    // se receber pedido imprimir TSKEX
+    //se receber pedido imprimir TSKEX.
+
+    */
+
+
+
+    //fechar fifo privado(o client é q elimina)
+}
+
+void* consumerThread(){
+    /*
+    char privateFIFO[1000];
+    int private_pipe;
+    sprintf(privateFIFO, "/tmp/%d.%ld", msg->pid, msg->tid);
 
 
     if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
@@ -63,11 +77,11 @@ void* serverThread(void* message) {
         exit(1);
     }
     */
+    while(consuming){};
+    //verificar buffer
 
 
-
-    //fechar fifo privado(o client é q elimina)
-}
+} 
 
 int main(int argc, char* argv[], char* envp[]) {
     int nsecs, bufsz = 0;
@@ -93,10 +107,11 @@ int main(int argc, char* argv[], char* envp[]) {
         strcpy(publicFIFO, buffer);
     }
 
-
+    /*
     if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
         perror("Error creating semaphore\n");
-
+    */
+   //acho q é para fazer isto dentro da thread
 
     time_t start = time(NULL);
     time_t endwait = time(NULL) + nsecs;
@@ -117,6 +132,12 @@ int main(int argc, char* argv[], char* envp[]) {
     bool processing = true;
     int reading;
 
+    if (pthread_create(&tid, NULL, consumerThread, NULL)) {
+                //cria thread produtora
+                perror("Error creating thread");
+                exit(1);
+            }
+
     while (start < endwait) {   //tenho de dar free a msg em todos os ciclos?
         msg = (Message*)malloc(sizeof(Message));
         reading = read(public_pipe, msg, sizeof(Message));
@@ -125,13 +146,15 @@ int main(int argc, char* argv[], char* envp[]) {
             op_print("RECVD", *msg);    
 
             //o semaforo é aqui ou na thread produtora?
+            /*
             if(sem_wait(bufszSem) == -1){
                 free(msg);
                 perror("Error waiting for semaphore\n");
                 break;
             }
+            */
 
-            if (pthread_create(&tid, NULL, serverThread, (void*) msg)) {
+            if (pthread_create(&tid, NULL, producerThread, (void*) msg)) {
                 //cria thread produtora
                 perror("Error creating thread");
                 exit(1);
@@ -150,6 +173,8 @@ int main(int argc, char* argv[], char* envp[]) {
             break;
         }
     }
+
+    consuming = 0;
 
     //Close and Delete FIFO
     if (close(public_pipe) == -1) {
