@@ -17,7 +17,10 @@
 #include <pthread.h>
 #include <semaphore.h>
 
+#include "lib.h"
+
 sem_t *bufszSem;
+int bufsz = 0;
 static int public_pipe;
 static int consuming = 1;
 
@@ -44,24 +47,31 @@ void op_print(char op[], Message msg) {
 }
 
 void* producerThread(void* message) {
-    /*
-    ISTO NAO VAI SER PARA A THREAD PRODUTORA
-    char privateFIFO[1000];
-    int private_pipe;
-    //usar msg para obter variaveis para abrir o private fifo
+
+    if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
+        perror("Error creating semaphore\n");
+    
     Message* msg = (Message*) message;
 
+    if(sem_wait(bufszSem) == -1){
+        free(msg);
+        perror("Error waiting for semaphore\n");
+    }
 
-    //NAO TENHO A CERTEZA DESTES PASSOS:
-    //semaforo que monitoriza a quantidade de pedidos ao bufsz
-    //mandar pedido ao B
-    //se receber pedido imprimir TSKEX.
+    msg->tskres = task(msg->tskload);
 
-    */
+    //falta colocar resultado n armazem
 
+    if(sem_post(bufszSem) == -1){
+        free(msg);
+        perror("Error unlocking semaphore\n");
+    }
 
+    //free(msg)?? TENHO DE A PASSAR AO CONSUMIDOR DE ALGUMA FORMA
+    //pelo armazem talvez?
 
-    //fechar fifo privado(o client é q elimina)
+  
+
 }
 
 void* consumerThread(){
@@ -91,7 +101,7 @@ void* consumerThread(){
 } 
 
 int main(int argc, char* argv[], char* envp[]) {
-    int nsecs, bufsz = 0;
+    int nsecs;
     char publicFIFO[25], buffer[30];
     srand(time(NULL));
 
