@@ -65,7 +65,6 @@ void* producerThread(void* message) {
 }
 
 void* consumerThread(){
-    /*
     char privateFIFO[1000];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", msg->pid, msg->tid);
@@ -76,8 +75,16 @@ void* consumerThread(){
         perror("Error opening private FIFO");
         exit(1);
     }
-    */
-    while(consuming){};
+    
+    //vai ser preciso um private pipe por cada request portanto esta mal aquilo em cima
+    //se a funçao devolver a mensagem é facil, e so fazer o sprintf e abrir o pipe em cada 
+    //vez que é para enviar a msg
+    while(consuming){
+        //chamar funçao
+        //se chamar funçao:
+        write(private_pipe, msg, sizeof(Message));
+        //falta ver se da erro
+    };
     //verificar buffer
 
 
