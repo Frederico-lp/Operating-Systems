@@ -20,11 +20,13 @@
 #include "lib.h"
 
 sem_t *bufszSem;
-int bufsz = 0;
+int bufsz = 20;
 static int public_pipe;
 static int consuming = 1;
+Message* buffer[];
+int lastBufferPos = 0;
 
-typedef struct Messages { //é diferente não?
+typedef struct Messages { 
     int rid;    // request id
     pid_t pid;    // process id
     pthread_t tid;    // thread id
@@ -60,17 +62,14 @@ void* producerThread(void* message) {
 
     msg->tskres = task(msg->tskload);
 
-    //falta colocar resultado n armazem
+    buffer[lastBufferPos] = msg;
 
     if(sem_post(bufszSem) == -1){
         free(msg);
         perror("Error unlocking semaphore\n");
     }
 
-    //free(msg)?? TENHO DE A PASSAR AO CONSUMIDOR DE ALGUMA FORMA
-    //pelo armazem talvez?
-
-  
+    free(msg);  
 
 }
 
@@ -123,6 +122,9 @@ int main(int argc, char* argv[], char* envp[]) {
         sprintf(buffer, "/tmp/%s", publicFIFO);
         strcpy(publicFIFO, buffer);
     }
+
+    buffer[bufsz];//posso por assim?
+
 
     /*
     if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
