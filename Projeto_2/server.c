@@ -19,12 +19,13 @@
 
 #include "lib.h"
 
-sem_t *bufszSem;
+sem_t *bufszSem, *semFull;
 int bufsz = 20;
 static int public_pipe;
 static int consuming = 1;
 Message* buffer[];
 int lastBufferPos = 0;
+pthread_mutex_t buffer_pos;
 
 typedef struct Messages { 
     int rid;    // request id
@@ -50,8 +51,8 @@ void op_print(char op[], Message msg) {
 
 void* producerThread(void* message) {
 
-    if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
-        perror("Error creating semaphore\n");
+    // if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
+    //     perror("Error creating semaphore\n");
     
     Message* msg = (Message*) message;
 
@@ -62,9 +63,12 @@ void* producerThread(void* message) {
 
     msg->tskres = task(msg->tskload);
 
+    pthread_mutex_lock(&buffer_pos);
     buffer[lastBufferPos] = msg;
+    lastBufferPos++;
+    pthread_mutex_unlock(&buffer_pos);
 
-    if(sem_post(bufszSem) == -1){
+    if(sem_post(semFull) == -1){
         free(msg);
         perror("Error unlocking semaphore\n");
     }
@@ -74,10 +78,10 @@ void* producerThread(void* message) {
 }
 
 void* consumerThread(){
+
     char privateFIFO[1000];
     int private_pipe;
     sprintf(privateFIFO, "/tmp/%d.%ld", msg->pid, msg->tid);
-
 
     if ((private_pipe = open(privateFIFO, O_RDONLY)) == -1) {
         free(msg);  //free msg ou tenho de dar free a tudo la dentro antes?
@@ -85,21 +89,32 @@ void* consumerThread(){
         exit(1);
     }
     
+    Message* msg;
+    msg = (Message*)malloc(sizeof(Message));;
     //vai ser preciso um private pipe por cada request portanto esta mal aquilo em cima
     //se a funçao devolver a mensagem é facil, e so fazer o sprintf e abrir o pipe em cada 
     //vez que é para enviar a msg
     while(consuming){
-        //chamar funçao
-        //se chamar funçao:
+
+        if(sem_wait(semFull) == -1){
+            perror("Empty\n");
+        }
+
+        pthread_mutex_lock(&buffer_pos);
+        lastBufferPos--;
+        msg = buffer[lastBufferPos]; // pos-1 pq pos foi incrementada dps de guardar msg na producer
+        pthread_mutex_unlock(&buffer_pos);
+
         write(private_pipe, msg, sizeof(Message));
-        //falta ver se da erro
-    };
-    //verificar buffer
 
-
+        if(sem_post(bufszSem) == -1){
+            perror("Error unlocking semaphore\n");
+        }
+    }
 } 
 
 int main(int argc, char* argv[], char* envp[]) {
+
     int nsecs;
     char publicFIFO[25], buffer[30];
     srand(time(NULL));
@@ -124,12 +139,15 @@ int main(int argc, char* argv[], char* envp[]) {
     }
 
     buffer[bufsz];//posso por assim?
-
-
-    /*
-    if(sem_init(bufszSem, 1, bufsz) == -1)    //n pode ser 0 para n ser partilhado, 1??
+    
+    if(sem_init(bufszSem, 0, bufsz) == -1){ //n pode ser 0 para n ser partilhado, 1??
         perror("Error creating semaphore\n");
-    */
+    }    
+    if(sem_init(semFull, 0, 0) == -1){ //0 is the initial value 
+        perror("Error creating semaphore\n");
+    } 
+    pthread_mutex_init(buffer_pos, NULL);
+    
    //acho q é para fazer isto dentro da thread
 
     time_t start = time(NULL);
@@ -152,10 +170,10 @@ int main(int argc, char* argv[], char* envp[]) {
     int reading;
 
     if (pthread_create(&tid, NULL, consumerThread, NULL)) {
-                //cria thread produtora
-                perror("Error creating thread");
-                exit(1);
-            }
+        //cria thread produtora
+        perror("Error creating thread");
+        exit(1);
+    }
 
     while (start < endwait) {   //tenho de dar free a msg em todos os ciclos?
         msg = (Message*)malloc(sizeof(Message));
@@ -163,15 +181,6 @@ int main(int argc, char* argv[], char* envp[]) {
 
         if (reading > 0) {
             op_print("RECVD", *msg);    
-
-            //o semaforo é aqui ou na thread produtora?
-            /*
-            if(sem_wait(bufszSem) == -1){
-                free(msg);
-                perror("Error waiting for semaphore\n");
-                break;
-            }
-            */
 
             if (pthread_create(&tid, NULL, producerThread, (void*) msg)) {
                 //cria thread produtora
@@ -205,6 +214,10 @@ int main(int argc, char* argv[], char* envp[]) {
         perror("Error deleting public FIFO");
         exit(1);
     }
+
+    sem_destroy(bufszSem);
+    sem_destroy(semFull);
+    pthread_mutex_destroy(buffer_pos);
 
     pthread_exit(NULL);
 }
