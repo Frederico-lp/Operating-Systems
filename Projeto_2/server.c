@@ -51,12 +51,36 @@ void op_print(char op[], Message msg) {
     fflush(stdout);
 }
 
+void* closdThread(void* message) {
+
+    Message* msg = (Message*)message;
+
+    if (sem_wait(&bufszSem) == -1) {
+        //free(msg);
+        perror("Error waiting for semaphore\n");
+    }
+
+    msg->tskres = -1;
+
+    pthread_mutex_lock(&buffer_pos);
+    buffer[lastBufferPos] = msg;
+    lastBufferPos++;
+    pthread_mutex_unlock(&buffer_pos);
+
+    if (sem_post(&semFull) == -1) {
+        //free(msg);
+        perror("Error unlocking semaphore\n");
+    }
+
+
+}
+
 void* producerThread(void* message) {
 
     Message* msg = (Message*) message;
 
     if(sem_wait(&bufszSem) == -1){
-        free(msg);
+        //free(msg);
         perror("Error waiting for semaphore\n");
     }
 
@@ -72,11 +96,10 @@ void* producerThread(void* message) {
     pthread_mutex_unlock(&buffer_pos);
 
     if(sem_post(&semFull) == -1){
-        free(msg);
+        //free(msg);
         perror("Error unlocking semaphore\n");
     }
 
-    //free(msg);  
 
 }
 
@@ -86,9 +109,7 @@ void* consumerThread(){
     int private_pipe;
 
     Message* msg;
-    //vai ser preciso um private pipe por cada request portanto esta mal aquilo em cima
-    //se a funçao devolver a mensagem é facil, e so fazer o sprintf e abrir o pipe em cada 
-    //vez que é para enviar a msg
+
     while(consuming){
 
         if(sem_wait(&semFull) == -1){
@@ -101,24 +122,27 @@ void* consumerThread(){
         pthread_mutex_unlock(&buffer_pos);
 
         sprintf(privateFIFO, "/tmp/%d.%lu", msg->pid, msg->tid);
-        printf("fifo privado é %s\n", privateFIFO);
-        op_print("TESTE", *msg);
+        //printf("fifo privado é %s\n", privateFIFO);
 
-        if ((private_pipe = open(privateFIFO, O_WRONLY)) == -1) {
-            free(msg);
-            perror("Error opening private FIFO");
-            exit(1);
-        }
-
-        int ret_value = write(private_pipe, msg, sizeof(Message));
-
-        if(ret_value>0){
-            op_print("TSKDN", *msg);
-        }
-        else if(ret_value==-1){
+        if ((private_pipe = open(privateFIFO, O_WRONLY | O_NONBLOCK)) == -1) {
             op_print("FAILD", *msg);
+            //perror("Error opening private FIFO");
+            //exit(1);
         }
+        else {
 
+            int ret_value = write(private_pipe, msg, sizeof(Message));
+
+            if (ret_value == -1) {
+                op_print("FAILD", *msg);
+            }
+            else if (ret_value > 0 && msg->tskres != -1) {
+                op_print("TSKDN", *msg);
+            }
+            else if (ret_value > 0) {
+                op_print("2LATE", *msg);
+            }
+        }
         if(sem_post(&bufszSem) == -1){
             perror("Error unlocking semaphore\n");
         }
@@ -128,8 +152,7 @@ void* consumerThread(){
 int main(int argc, char* argv[], char* envp[]) {
 
 
-    printf("%d", argc);
-    printf("AQUI1");
+
     int nsecs;
     char publicFIFO[25], bfr[30];
     srand(time(NULL));
@@ -137,14 +160,14 @@ int main(int argc, char* argv[], char* envp[]) {
     
     if (argc != 4 && argc != 6) {
         perror("Usage: s <-t nsecs>  [-l bufsz] fifoname");
-        //exit(1);
+        exit(1);
     }
     
-    printf("AQUI2");
+
     
 
     nsecs = atoi(argv[2]);
-    printf("AQUI3");
+
 
     if(argc == 4)
         strcpy(publicFIFO, argv[3]);  
@@ -152,7 +175,6 @@ int main(int argc, char* argv[], char* envp[]) {
         strcpy(publicFIFO, argv[5]); 
         bufsz = atoi(argv[4]);
     }
-    printf("AQUI4");
     printf("%s\n", publicFIFO);
 
     if (strstr(publicFIFO, "/tmp/") == NULL) {
@@ -160,13 +182,15 @@ int main(int argc, char* argv[], char* envp[]) {
         strcpy(publicFIFO, bfr);
     }
 
-
     buffer = malloc(bufsz * sizeof(Message*));
+    /*
     for(int i = 0; i < bufsz; i++)
         buffer[i] = malloc((sizeof(Message*)) );
+        */
         
     
-    if(sem_init(&bufszSem, 0, bufsz) == -1){ //n pode ser 0 para n ser partilhado, 1??
+    int temp=bufsz;
+    if(sem_init(&bufszSem, 0, temp) == -1){
         perror("Error creating semaphore\n");
     }    
     if(sem_init(&semFull, 0, 0) == -1){ //0 is the initial value 
@@ -179,7 +203,6 @@ int main(int argc, char* argv[], char* envp[]) {
     time_t endwait = time(NULL) + nsecs;
 
 
-    unlink(publicFIFO);////////////////////////////// como encravava n estava a apaagr e dava erro a seguir
     if(mkfifo(publicFIFO, 0777) == -1){
         perror("Error creating public FIFO");
         //exit(1);
@@ -202,24 +225,36 @@ int main(int argc, char* argv[], char* envp[]) {
         //exit(1);
     }
 
-    while (start < endwait) {   //tenho de dar free a msg em todos os ciclos?
+
+    do {   //tenho de dar free a msg em todos os ciclos?
+        if (start > endwait) {
+            if (chmod(publicFIFO, S_IRUSR | S_IRGRP | S_IROTH) == -1) {
+                perror("chmod error");
+            }
+        }
         msg = (Message*)malloc(sizeof(Message));
         reading = read(public_pipe, msg, sizeof(Message));
 
-        if (reading > 0) {
-            op_print("RECVD", *msg);    
+        if (reading > 0 && start <= endwait) {
+            op_print("RECVD", *msg);
 
-            if (pthread_create(&tid, NULL, producerThread, (void*) msg)) {
+            if (pthread_create(&tid, NULL, producerThread, (void*)msg)) {
                 //cria thread produtora
                 perror("Error creating thread");
                 //exit(1);
             }
 
             pthread_detach(tid);
+        }else if (reading > 0 && start >= endwait) {
+            op_print("RECVD", *msg);
+            if (pthread_create(&tid, NULL, closdThread, (void*)msg)) {
+                //cria thread que diz closd
+                perror("Error creating thread");
+                //exit(1);
+            }
+            //op_print("FAILD", *msg);
         }
-
         else if (reading == 0) {
-            free(msg);
         }
 
         else {
@@ -227,10 +262,12 @@ int main(int argc, char* argv[], char* envp[]) {
             free(msg);
             break;
         }
+        free(msg);
         start = time(NULL);
-    }
-
+    }while (start <= endwait || reading > 0);
+    //sleep(5);
     consuming = 0;
+    //printf("\n\n number of buffer msgs is %d\n\n", lastBufferPos);
 
     //Close and Delete FIFO
     if (close(public_pipe) == -1) {
@@ -243,9 +280,14 @@ int main(int argc, char* argv[], char* envp[]) {
         //exit(1);
     }
 
+    for (int i = 0; i < bufsz; i++)
+        free(buffer[i]);
+    free(buffer);
+
     sem_destroy(&bufszSem);
     sem_destroy(&semFull);
     pthread_mutex_destroy(&buffer_pos);
+    usleep(1000);
 
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
 }
